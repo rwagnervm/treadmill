@@ -1,3 +1,4 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as fbp;
 import '../models/treadmill_data.dart';
@@ -16,6 +17,7 @@ class _TreadmillDataScreenState extends State<TreadmillDataScreen> {
   late BluetoothService _bluetoothService;
   late Stream<TreadmillData> _dataStream;
   TreadmillData _lastData = TreadmillData();
+  final List<FlSpot> _speedDataPoints = [];
 
   @override
   void initState() {
@@ -65,7 +67,7 @@ class _TreadmillDataScreenState extends State<TreadmillDataScreen> {
   Widget build(BuildContext context) {
     return PopScope(
       canPop: true,
-      onPopInvoked: (didPop) async {
+      onPopInvokedWithResult: (didPop, _) async {
         if (!didPop) {
           await _disconnect();
         }
@@ -89,6 +91,12 @@ class _TreadmillDataScreenState extends State<TreadmillDataScreen> {
           builder: (context, snapshot) {
             if (snapshot.hasData) {
               _lastData = snapshot.data!;
+              // Adiciona novo ponto de velocidade ao gráfico
+              // Usa o tempo como eixo X e a velocidade como eixo Y
+              _speedDataPoints.add(FlSpot(
+                _lastData.time.toDouble(),
+                _lastData.speed,
+              ));
             }
 
             return SingleChildScrollView(
@@ -131,6 +139,9 @@ class _TreadmillDataScreenState extends State<TreadmillDataScreen> {
                       onIncrease: () => _adjustSpeed(0.5),
                       onDecrease: () => _adjustSpeed(-0.5),
                     ),
+                    const SizedBox(height: 16),
+                    // Gráfico de velocidade
+                    _buildSpeedChart(),
                     const SizedBox(height: 16),
                     // Inclinação
                     _buildDataCard(
@@ -217,6 +228,46 @@ class _TreadmillDataScreenState extends State<TreadmillDataScreen> {
     );
   }
 
+  Widget _buildSpeedChart() {
+    return SizedBox(
+      height: 200,
+      child: Card(
+        elevation: 4,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: LineChart(
+            LineChartData(
+              gridData: const FlGridData(show: false),
+              titlesData: const FlTitlesData(show: false),
+              borderData: FlBorderData(
+                show: true,
+                border: Border.all(color: const Color(0xff37434d), width: 1),
+              ),
+              minX: 0,
+              // maxX: (_lastData.time > 300) ? _lastData.time.toDouble() : 300, // 5 minutos
+              minY: 0,
+              maxY: 20, // Velocidade máxima da esteira
+              lineBarsData: [
+                LineChartBarData(
+                  spots: _speedDataPoints,
+                  isCurved: true,
+                  color: Colors.blue,
+                  barWidth: 3,
+                  isStrokeCapRound: true,
+                  dotData: const FlDotData(show: false),
+                  belowBarData: BarAreaData(
+                    show: true,
+                    color: Colors.blue.withAlpha(77),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildMainDataCard({
     required String title,
     required String value,
@@ -232,7 +283,7 @@ class _TreadmillDataScreenState extends State<TreadmillDataScreen> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           gradient: LinearGradient(
-            colors: [color.withOpacity(0.2), color.withOpacity(0.05)],
+            colors: [color.withAlpha(51), color.withAlpha(13)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -304,12 +355,12 @@ class _TreadmillDataScreenState extends State<TreadmillDataScreen> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           gradient: LinearGradient(
-            colors: [color.withOpacity(0.1), color.withOpacity(0.02)],
+            colors: [color.withAlpha(26), color.withAlpha(5)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
         ),
-        padding: const EdgeInsets.all(16),
+
         child: Row(
           children: [
             Icon(icon, size: 40, color: color),
@@ -381,7 +432,7 @@ class _TreadmillDataScreenState extends State<TreadmillDataScreen> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           gradient: LinearGradient(
-            colors: [color.withOpacity(0.1), color.withOpacity(0.02)],
+            colors: [color.withAlpha(26), color.withAlpha(5)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),

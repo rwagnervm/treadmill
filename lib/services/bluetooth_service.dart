@@ -46,7 +46,7 @@ class BluetoothService {
       await fbp.FlutterBluePlus.stopScan();
       return allDevices;
     } catch (e) {
-      print('Erro ao scanear dispositivos: $e');
+      // print('Erro ao scanear dispositivos: $e');
       return [];
     }
   }
@@ -84,7 +84,7 @@ class BluetoothService {
       
       return true;
     } catch (e) {
-      print('Erro ao conectar ao dispositivo: $e');
+      // print('Erro ao conectar ao dispositivo: $e');
       return false;
     }
   }
@@ -97,7 +97,7 @@ class BluetoothService {
     
     // Habilitar notificações
     characteristic.setNotifyValue(true).catchError((e) {
-      print('Erro ao habilitar notificações: $e');
+      // print('Erro ao habilitar notificações: $e');
       return false;
     });
   }
@@ -181,7 +181,7 @@ class BluetoothService {
 
       _treadmillDataController.add(data);
     } catch (e) {
-      print('Erro ao processar dados da esteira: $e');
+      // print('Erro ao processar dados da esteira: $e');
     }
   }
 
@@ -192,14 +192,14 @@ class BluetoothService {
       // Opcode 0x00: Request Control
       await _controlPointCharacteristic!.write([0x00]);
     } catch (e) {
-      print('Erro ao solicitar controle: $e');
+      // print('Erro ao solicitar controle: $e');
     }
   }
 
   /// Define a velocidade alvo (km/h)
   Future<void> setTargetSpeed(double speedKmh) async {
     if (_controlPointCharacteristic == null) {
-      print('Control Point não encontrado');
+      // print('Control Point não encontrado');
       return;
     }
     try {
@@ -209,7 +209,7 @@ class BluetoothService {
       List<int> data = [0x02, value & 0xFF, (value >> 8) & 0xFF];
       await _controlPointCharacteristic!.write(data);
     } catch (e) {
-      print('Erro ao definir velocidade: $e');
+      // print('Erro ao definir velocidade: $e');
     }
   }
 
@@ -223,7 +223,7 @@ class BluetoothService {
       List<int> data = [0x03, value & 0xFF, (value >> 8) & 0xFF];
       await _controlPointCharacteristic!.write(data);
     } catch (e) {
-      print('Erro ao definir inclinação: $e');
+      // print('Erro ao definir inclinação: $e');
     }
   }
 
@@ -246,7 +246,7 @@ class BluetoothService {
         _controlPointCharacteristic = null;
       }
     } catch (e) {
-      print('Erro ao desconectar: $e');
+      // print('Erro ao desconectar: $e');
     }
   }
 

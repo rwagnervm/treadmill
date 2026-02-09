@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as fbp;
 import '../services/bluetooth_service.dart';
@@ -14,30 +16,34 @@ class _DeviceSelectionScreenState extends State<DeviceSelectionScreen> {
   late BluetoothService _bluetoothService;
   List<fbp.BluetoothDevice> _devices = [];
   bool _isScanning = false;
+  late StreamSubscription<fbp.BluetoothAdapterState> _adapterStateSubscription;
 
   @override
   void initState() {
     super.initState();
     _bluetoothService = BluetoothService();
+    _adapterStateSubscription =
+        fbp.FlutterBluePlus.adapterState.listen((fbp.BluetoothAdapterState state) {
+      if (state == fbp.BluetoothAdapterState.on) {
+        _scanForDevices();
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Por favor, ative o Bluetooth'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    });
     _checkBluetoothAndScan();
   }
 
   Future<void> _checkBluetoothAndScan() async {
-    // Verificar se Bluetooth está ativado
-    bool isOn = await fbp.FlutterBluePlus.isOn;
-    if (!isOn) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Por favor, ative o Bluetooth'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-      return;
+    if (await fbp.FlutterBluePlus.adapterState.first == fbp.BluetoothAdapterState.on) {
+      _scanForDevices();
     }
-
-    _scanForDevices();
   }
 
   Future<void> _scanForDevices() async {
@@ -214,6 +220,7 @@ class _DeviceSelectionScreenState extends State<DeviceSelectionScreen> {
 
   @override
   void dispose() {
+    _adapterStateSubscription.cancel();
     _bluetoothService.dispose();
     super.dispose();
   }
