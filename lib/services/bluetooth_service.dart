@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as fbp;
 import '../models/treadmill_data.dart';
 
@@ -14,10 +15,11 @@ class BluetoothService {
   fbp.BluetoothDevice? _connectedDevice;
   fbp.BluetoothCharacteristic? _controlPointCharacteristic;
   StreamSubscription? _ftmsSubscription;
-  
+
   final _treadmillDataController = StreamController<TreadmillData>.broadcast();
-  
-  Stream<TreadmillData> get treadmillDataStream => _treadmillDataController.stream;
+
+  Stream<TreadmillData> get treadmillDataStream =>
+      _treadmillDataController.stream;
 
   fbp.BluetoothDevice? get connectedDevice => _connectedDevice;
 
@@ -46,7 +48,7 @@ class BluetoothService {
       await fbp.FlutterBluePlus.stopScan();
       return allDevices;
     } catch (e) {
-      // print('Erro ao scanear dispositivos: $e');
+      print('Erro ao scanear dispositivos: $e');
       return [];
     }
   }
@@ -59,16 +61,16 @@ class BluetoothService {
         license: fbp.License.free,
       );
       _connectedDevice = device;
-      
+
       // Descobrir serviços
       List<fbp.BluetoothService> services = await device.discoverServices();
-      
+
       // Procurar pelo serviço FTMS (Fitness Training Machine Service)
       for (var service in services) {
         for (var characteristic in service.characteristics) {
           String uuid = characteristic.uuid.toString().toLowerCase();
-          // UUID do FTMS Treadmill Data characteristic (0x2AD1)
-          if (uuid == '00002ad1-0000-1000-8000-00805f9b34fb') {
+          // UUID do FTMS Treadmill Data characteristic (0x2ACD)
+          if (uuid == '00002acd-0000-1000-8000-00805f9b34fb') {
             _subscribeTreadmillData(characteristic);
           }
           // UUID do FTMS Control Point (0x2AD9)
@@ -81,10 +83,10 @@ class BluetoothService {
           }
         }
       }
-      
+
       return true;
     } catch (e) {
-      // print('Erro ao conectar ao dispositivo: $e');
+      print('Erro ao conectar ao dispositivo: $e');
       return false;
     }
   }
@@ -94,94 +96,92 @@ class BluetoothService {
     _ftmsSubscription = characteristic.onValueReceived.listen((value) {
       _processTreadmillData(value);
     });
-    
+
     // Habilitar notificações
     characteristic.setNotifyValue(true).catchError((e) {
-      // print('Erro ao habilitar notificações: $e');
+      print('Erro ao habilitar notificações: $e');
       return false;
     });
   }
 
   /// Processa dados recebidos da esteira
   void _processTreadmillData(List<int> value) {
+    print('Dados recebidos: $value');
     try {
-      if (value.isEmpty) return;
+      if (value.length < 2) return;
 
       TreadmillData data = TreadmillData();
+      var byteData = ByteData.sublistView(Uint8List.fromList(value));
 
-      // Bit 0 indica se há mais dados (More Data Available)
-      // Bits 1-7 indicam quais dados estão presentes
-      int flags = value[0];
+      int flags = byteData.getUint16(0, Endian.little);
+      int offset = 2;
 
-      int offset = 1;
+      // Flags based on FTMS specification for Treadmill Data (0x2ACD)
+      const int totalDistancePresent = 1 << 2;
+      const int inclinationPresent = 1 << 3;
+      const int expendedEnergyPresent = 1 << 7;
+      const int heartRatePresent = 1 << 8;
+      const int elapsedTimePresent = 1 << 10;
 
-      // Flags para indicar quais dados estão presentes
-      const int instantaneousSpeedPresent = 0x01;
-      const int inclinationPresent = 0x02;
-      const int rampAnglePresent = 0x04;
-      const int distancePresent = 0x08;
-      const int timePresent = 0x10;
-      const int caloriesPresent = 0x20;
-      const int heartRatePresent = 0x40;
-      const int runningPresent = 0x80;
-
-      // Velocidade instantânea (2 bytes, little-endian, 0.01 km/h)
-      if ((flags & instantaneousSpeedPresent) != 0) {
-        int speed = value[offset] | (value[offset + 1] << 8);
+      // Instantaneous Speed is always present
+      if (value.length >= offset + 2) {
+        int speed = byteData.getUint16(offset, Endian.little);
         data.speed = speed * 0.01;
         offset += 2;
       }
 
-      // Inclinação (2 bytes, signed, little-endian, 0.1%)
+      // Total Distance
+      if ((flags & totalDistancePresent) != 0) {
+        if (value.length >= offset + 3) {
+          int distance = byteData.getUint8(offset) |
+              (byteData.getUint8(offset + 1) << 8) |
+              (byteData.getUint8(offset + 2) << 16);
+          data.distance = distance.toDouble();
+          offset += 3;
+        }
+      }
+
+      // Inclination and Ramp Angle
       if ((flags & inclinationPresent) != 0) {
-        int incline = _bytesToSignedInt16(value[offset], value[offset + 1]);
-        data.incline = incline * 0.1;
-        offset += 2;
+        if (value.length >= offset + 4) {
+          int incline = byteData.getInt16(offset, Endian.little);
+          data.incline = incline * 0.1;
+          offset += 2; // Inclination
+          offset += 2; // Ramp Angle (skipped)
+        }
       }
 
-      // Ramp Angle (2 bytes, signed, little-endian, 0.1°)
-      if ((flags & rampAnglePresent) != 0) {
-        offset += 2;
+      // Expended Energy
+      if ((flags & expendedEnergyPresent) != 0) {
+        if (value.length >= offset + 3) {
+          // Total Energy, Energy Per Hour, Energy Per Minute
+          int calories = byteData.getUint16(offset, Endian.little);
+          data.calories = calories;
+          offset += 2; // Total Energy
+          offset += 2; // Energy Per Hour (skipped)
+          offset += 1; // Energy Per Minute (skipped)
+        }
       }
 
-      // Distância (3 bytes, little-endian, 1 metro)
-      if ((flags & distancePresent) != 0) {
-        int distance = value[offset] | 
-            (value[offset + 1] << 8) | 
-            (value[offset + 2] << 16);
-        data.distance = distance.toDouble();
-        offset += 3;
-      }
-
-      // Tempo (2 bytes, little-endian, 1 segundo)
-      if ((flags & timePresent) != 0) {
-        int time = value[offset] | (value[offset + 1] << 8);
-        data.time = time;
-        offset += 2;
-      }
-
-      // Calorias (2 bytes, little-endian, 1 caloria)
-      if ((flags & caloriesPresent) != 0) {
-        int calories = value[offset] | (value[offset + 1] << 8);
-        data.calories = calories;
-        offset += 2;
-      }
-
-      // Heart Rate (1 byte)
+      // Heart Rate
       if ((flags & heartRatePresent) != 0) {
-        data.heartRate = value[offset];
-        offset += 1;
+        if (value.length >= offset + 1) {
+          data.heartRate = byteData.getUint8(offset);
+          offset += 1;
+        }
       }
 
-      // Running Status
-      if ((flags & runningPresent) != 0) {
-        data.isRunning = value[offset] == 1;
-        offset += 1;
+      // Elapsed Time
+      if ((flags & elapsedTimePresent) != 0) {
+        if (value.length >= offset + 2) {
+          data.time = byteData.getUint16(offset, Endian.little);
+          offset += 2;
+        }
       }
 
       _treadmillDataController.add(data);
     } catch (e) {
-      // print('Erro ao processar dados da esteira: $e');
+      print('Erro ao processar dados da esteira: $e');
     }
   }
 
@@ -192,14 +192,14 @@ class BluetoothService {
       // Opcode 0x00: Request Control
       await _controlPointCharacteristic!.write([0x00]);
     } catch (e) {
-      // print('Erro ao solicitar controle: $e');
+      print('Erro ao solicitar controle: $e');
     }
   }
 
   /// Define a velocidade alvo (km/h)
   Future<void> setTargetSpeed(double speedKmh) async {
     if (_controlPointCharacteristic == null) {
-      // print('Control Point não encontrado');
+      print('Control Point não encontrado');
       return;
     }
     try {
@@ -209,7 +209,7 @@ class BluetoothService {
       List<int> data = [0x02, value & 0xFF, (value >> 8) & 0xFF];
       await _controlPointCharacteristic!.write(data);
     } catch (e) {
-      // print('Erro ao definir velocidade: $e');
+      print('Erro ao definir velocidade: $e');
     }
   }
 
@@ -223,7 +223,7 @@ class BluetoothService {
       List<int> data = [0x03, value & 0xFF, (value >> 8) & 0xFF];
       await _controlPointCharacteristic!.write(data);
     } catch (e) {
-      // print('Erro ao definir inclinação: $e');
+      print('Erro ao definir inclinação: $e');
     }
   }
 
@@ -246,7 +246,7 @@ class BluetoothService {
         _controlPointCharacteristic = null;
       }
     } catch (e) {
-      // print('Erro ao desconectar: $e');
+      print('Erro ao desconectar: $e');
     }
   }
 
