@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as fbp;
 import '../services/bluetooth_service.dart';
 import 'treadmill_data_screen.dart';
+import 'debug_screen.dart';
 
 class DeviceSelectionScreen extends StatefulWidget {
   const DeviceSelectionScreen({super.key});
@@ -140,6 +141,20 @@ class _DeviceSelectionScreenState extends State<DeviceSelectionScreen> {
         title: const Text('Selecionar Esteira'),
         elevation: 0,
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          if (_devices.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.bug_report),
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => DebugScreen(device: _devices.first),
+                  ),
+                );
+              },
+              tooltip: 'Debug Bluetooth',
+            ),
+        ],
       ),
       body: Column(
         children: [

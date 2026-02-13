@@ -17,9 +17,12 @@ class BluetoothService {
   StreamSubscription? _ftmsSubscription;
 
   final _treadmillDataController = StreamController<TreadmillData>.broadcast();
+  final _rawBytesController = StreamController<List<int>>.broadcast();
 
   Stream<TreadmillData> get treadmillDataStream =>
       _treadmillDataController.stream;
+
+  Stream<List<int>> get rawBytesStream => _rawBytesController.stream;
 
   fbp.BluetoothDevice? get connectedDevice => _connectedDevice;
 
@@ -94,6 +97,9 @@ class BluetoothService {
   /// Subscreve aos dados da esteira
   void _subscribeTreadmillData(fbp.BluetoothCharacteristic characteristic) {
     _ftmsSubscription = characteristic.onValueReceived.listen((value) {
+      // Emitir bytes brutos para debug
+      _rawBytesController.add(value);
+      // Processar e emitir dados decodificados
       _processTreadmillData(value);
     });
 
@@ -227,15 +233,6 @@ class BluetoothService {
     }
   }
 
-  /// Converte dois bytes em um inteiro signed de 16 bits
-  int _bytesToSignedInt16(int lowByte, int highByte) {
-    int value = lowByte | (highByte << 8);
-    if (value & 0x8000 != 0) {
-      value = -(0x10000 - value);
-    }
-    return value;
-  }
-
   /// Desconecta do dispositivo
   Future<void> disconnectDevice() async {
     try {
@@ -254,5 +251,6 @@ class BluetoothService {
   void dispose() {
     _ftmsSubscription?.cancel();
     _treadmillDataController.close();
+    _rawBytesController.close();
   }
 }
