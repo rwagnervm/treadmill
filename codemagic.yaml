@@ -1,0 +1,12 @@
+scripts:
+  - name: Build Flutter iOS (Unsigned)
+    script: | 
+      flutter build ios --release --no-codesign
+      
+  - name: Package IPA manually
+    script: |
+      mkdir Payload
+      mv build/ios/iphoneos/Runner.app Payload/
+      zip -r release_unsigned.ipa Payload
+    artifacts:
+      - release_unsigned.ipa
