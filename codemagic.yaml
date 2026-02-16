@@ -1,12 +1,23 @@
-scripts:
-  - name: Build Flutter iOS (Unsigned)
-    script: | 
-      flutter build ios --release --no-codesign
-      
-  - name: Package IPA manually
-    script: |
-      mkdir Payload
-      mv build/ios/iphoneos/Runner.app Payload/
-      zip -r release_unsigned.ipa Payload
+workflows:
+  ios-unsigned:
+    name: iOS Build (Unsigned)
+    instance_type: mac_mini_m1
+    environment:
+      flutter: stable
+      xcode: latest
+    scripts:
+      - name: Install dependencies
+        script: |
+          flutter packages get
+      - name: Build iOS without signing
+        script: |
+          # Compila o app sem pedir certificados
+          flutter build ios --release --no-codesign
+      - name: Package IPA
+        script: |
+          # Transforma a pasta .app em um arquivo .ipa instalável
+          mkdir Payload
+          mv build/ios/iphoneos/Runner.app Payload/
+          zip -r release_unsigned.ipa Payload
     artifacts:
       - release_unsigned.ipa
