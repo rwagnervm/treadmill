@@ -41,5 +41,18 @@ O **Treadmill Monitor** é uma aplicação Flutter completa que conecta seu smar
 - **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)**: Estrutura técnica e arquitetura.
 - **[DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md)**: Índice geral de toda a documentação.
 
+## 🚀 Deploy (CI/CD)
+
+O projeto utiliza **Codemagic** para integração e entrega contínua. O arquivo de configuração principal é o `codemagic.yaml`.
+
+### Workflow: `ios-unsigned`
+
+- **Objetivo**: Gera uma build de release para iOS (`.ipa`) **não assinada**.
+- **Utilidade**: Ideal para testes rápidos em simuladores ou para distribuição interna onde a assinatura é feita posteriormente.
+- **Processo**:
+  1. Instala as dependências do Flutter.
+  2. Compila o aplicativo em modo `release` sem exigir assinatura de código (`--no-codesign`).
+  3. Empacota o resultado (`Runner.app`) em um arquivo `.ipa` pronto para instalação.
+
 ---
 **Desenvolvido com ❤️ em Flutter**
