@@ -53,6 +53,21 @@ O projeto utiliza **Codemagic** para integração e entrega contínua. O arquivo
   1. Instala as dependências do Flutter.
   2. Compila o aplicativo em modo `release` sem exigir assinatura de código (`--no-codesign`).
   3. Empacota o resultado (`Runner.app`) em um arquivo `.ipa` pronto para instalação.
+ 
+### Deploy no iPhone
+
+- **1. Sobe o servidor de autenticação (Anisette) em background**:
+  
+  (sudo docker run -d --restart=always -p 6969:6969 --name anisette-server dadoum/anisette-v3-server 2>/dev/null || sudo docker start anisette-server) && sleep 3
+- **2. Roda a instalação do App apontando para o servidor local**:
+  
+  sudo docker run --rm -it \
+  --privileged \
+  -v /dev/bus/usb:/dev/bus/usb \
+  -v $(pwd):/data \
+  -e ALTSERVER_ANISETTE_SERVER=http://172.17.0.1:6969 \
+  altserver \
+  AltServer -u SEU_UUID -a "SEU_EMAIL" -p "SUA_SENHA" /data/release_unsigned.ipa
 
 ---
 **Desenvolvido com ❤️ em Flutter**
