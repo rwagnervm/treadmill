@@ -12,7 +12,7 @@ workflows:
       - name: Build iOS without signing
         script: |
           # Compila o app sem pedir certificados
-          flutter build ios --release --no-codesign
+          flutter build ios --release --no-codesign --dart-define=BUILD_DATE="$(date '+%d/%m/%Y %H:%M')"
       - name: Package IPA
         script: |
           # Transforma a pasta .app em um arquivo .ipa instalável

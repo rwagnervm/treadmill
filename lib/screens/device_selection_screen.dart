@@ -5,6 +5,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart' as fbp;
 import '../services/bluetooth_service.dart';
 import 'treadmill_data_screen.dart';
 import 'debug_screen.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class DeviceSelectionScreen extends StatefulWidget {
   const DeviceSelectionScreen({super.key});
@@ -18,13 +19,20 @@ class _DeviceSelectionScreenState extends State<DeviceSelectionScreen> {
   List<fbp.BluetoothDevice> _devices = [];
   bool _isScanning = false;
   late StreamSubscription<fbp.BluetoothAdapterState> _adapterStateSubscription;
+  String _appVersion = '...';
+  final String _buildDate = const String.fromEnvironment(
+    'BUILD_DATE',
+    defaultValue: 'Desconhecido',
+  );
 
   @override
   void initState() {
     super.initState();
+    _initPackageInfo();
     _bluetoothService = BluetoothService();
-    _adapterStateSubscription =
-        fbp.FlutterBluePlus.adapterState.listen((fbp.BluetoothAdapterState state) {
+    _adapterStateSubscription = fbp.FlutterBluePlus.adapterState.listen((
+      fbp.BluetoothAdapterState state,
+    ) {
       if (state == fbp.BluetoothAdapterState.on) {
         _scanForDevices();
       } else {
@@ -41,8 +49,18 @@ class _DeviceSelectionScreenState extends State<DeviceSelectionScreen> {
     _checkBluetoothAndScan();
   }
 
+  Future<void> _initPackageInfo() async {
+    final packageInfo = await PackageInfo.fromPlatform();
+    if (mounted) {
+      setState(() {
+        _appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
+      });
+    }
+  }
+
   Future<void> _checkBluetoothAndScan() async {
-    if (await fbp.FlutterBluePlus.adapterState.first == fbp.BluetoothAdapterState.on) {
+    if (await fbp.FlutterBluePlus.adapterState.first ==
+        fbp.BluetoothAdapterState.on) {
       _scanForDevices();
     }
   }
@@ -53,8 +71,8 @@ class _DeviceSelectionScreenState extends State<DeviceSelectionScreen> {
     setState(() => _isScanning = true);
 
     try {
-      List<fbp.BluetoothDevice> devices =
-          await _bluetoothService.scanForDevices();
+      List<fbp.BluetoothDevice> devices = await _bluetoothService
+          .scanForDevices();
       setState(() => _devices = devices);
 
       if (_devices.isEmpty && mounted) {
@@ -108,8 +126,7 @@ class _DeviceSelectionScreenState extends State<DeviceSelectionScreen> {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-              builder: (context) =>
-                  TreadmillDataScreen(device: device),
+              builder: (context) => TreadmillDataScreen(device: device),
             ),
           );
         } else {
@@ -204,9 +221,7 @@ class _DeviceSelectionScreenState extends State<DeviceSelectionScreen> {
                             device.platformName.isNotEmpty
                                 ? device.platformName
                                 : 'Dispositivo desconhecido',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                           subtitle: Text(device.remoteId.str),
                           trailing: const Icon(Icons.arrow_forward_ios),
@@ -228,6 +243,14 @@ class _DeviceSelectionScreenState extends State<DeviceSelectionScreen> {
               ),
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16.0),
+            child: Text(
+              'Build: $_appVersion\nData: $_buildDate',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+            ),
+          ),
         ],
       ),
     );
@@ -236,7 +259,9 @@ class _DeviceSelectionScreenState extends State<DeviceSelectionScreen> {
   @override
   void dispose() {
     _adapterStateSubscription.cancel();
-    _bluetoothService.dispose();
+    // NÃO chame _bluetoothService.dispose() aqui!
+    // O BluetoothService é um singleton e seus streams devem sobreviver
+    // à navegação entre telas.
     super.dispose();
   }
 }

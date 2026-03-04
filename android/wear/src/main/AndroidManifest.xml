@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.example.treadmill">
+
+    <!-- Permissões críticas para acesso aos sensores físicos no Galaxy Watch -->
+    <uses-permission android:name="android.permission.BODY_SENSORS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- A tag feature indica que esse é um app de Wear OS puramente standalone -->
+    <uses-feature android:name="android.hardware.type.watch" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.DeviceDefault">
+        
+        <!-- Ponto de entrada p/ UI do Wear OS que inicia a leitura do Heart Rate -->
+        <activity
+            android:name=".wear.MainActivity"
+            android:exported="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.DeviceDefault">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        
+        <!-- Opcional (apenas se for sincronizar grandes pacotes, mas útil deixar caso escalabilidade exija) -->
+        <meta-data
+            android:name="com.google.android.wearable.standalone"
+            android:value="true" />
+            
+    </application>
+
+</manifest>

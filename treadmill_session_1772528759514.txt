@@ -1,0 +1,16 @@
+=== Log de Sessão da Esteira ===
+Dispositivo: VISION ID 8318 (A0:BB:3E:E2:83:18)
+Início: 2026-03-03 06:05:59
+Exportado: 2026-03-03 06:06:35
+Total de entradas: 9
+================================
+
+[06:05:59.530] [SESSION] Sessão iniciada - Dispositivo: VISION ID 8318 (A0:BB:3E:E2:83:18)
+[06:05:59.535] [CMD] Solicitando controle da esteira...
+[06:05:59.657] [CMD] Controle disponível: false
+[06:06:18.667] [SESSION] Gravação pausada
+[06:06:20.969] [SESSION] Gravação retomada
+[06:06:26.215] [CMD] Iniciar esteira
+[06:06:27.447] [CMD] Iniciar esteira
+[06:06:28.122] [CMD] Iniciar esteira
+[06:06:28.364] [CMD] Iniciar esteira

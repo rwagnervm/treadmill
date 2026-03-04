@@ -16,15 +16,36 @@ class BluetoothService {
   fbp.BluetoothCharacteristic? _controlPointCharacteristic;
   StreamSubscription? _ftmsSubscription;
 
-  final _treadmillDataController = StreamController<TreadmillData>.broadcast();
-  final _rawBytesController = StreamController<List<int>>.broadcast();
+  /// Número máximo de níveis de inclinação do painel da esteira
+  static const double maxInclineLevels = 15.0;
+  /// Percentual FTMS máximo que corresponde ao nível máximo
+  static const double maxInclinePercent = 100.0;
 
-  Stream<TreadmillData> get treadmillDataStream =>
-      _treadmillDataController.stream;
+  StreamController<TreadmillData> _treadmillDataController = StreamController<TreadmillData>.broadcast();
+  StreamController<List<int>> _rawBytesController = StreamController<List<int>>.broadcast();
 
-  Stream<List<int>> get rawBytesStream => _rawBytesController.stream;
+  Stream<TreadmillData> get treadmillDataStream {
+    _ensureControllersOpen();
+    return _treadmillDataController.stream;
+  }
+
+  Stream<List<int>> get rawBytesStream {
+    _ensureControllersOpen();
+    return _rawBytesController.stream;
+  }
+
+  /// Ensures stream controllers are open; recreates them if they were closed.
+  void _ensureControllersOpen() {
+    if (_treadmillDataController.isClosed) {
+      _treadmillDataController = StreamController<TreadmillData>.broadcast();
+    }
+    if (_rawBytesController.isClosed) {
+      _rawBytesController = StreamController<List<int>>.broadcast();
+    }
+  }
 
   fbp.BluetoothDevice? get connectedDevice => _connectedDevice;
+  bool get hasControl => _controlPointCharacteristic != null;
 
   /// Obtém lista de dispositivos Bluetooth disponíveis
   Future<List<fbp.BluetoothDevice>> scanForDevices() async {
@@ -97,6 +118,8 @@ class BluetoothService {
   /// Subscreve aos dados da esteira
   void _subscribeTreadmillData(fbp.BluetoothCharacteristic characteristic) {
     _ftmsSubscription = characteristic.onValueReceived.listen((value) {
+      // Ensure controllers are still open before adding data
+      _ensureControllersOpen();
       // Emitir bytes brutos para debug
       _rawBytesController.add(value);
       // Processar e emitir dados decodificados
@@ -122,69 +145,90 @@ class BluetoothService {
       int flags = byteData.getUint16(0, Endian.little);
       int offset = 2;
 
-      // Flags based on FTMS specification for Treadmill Data (0x2ACD)
-      const int totalDistancePresent = 1 << 2;
-      const int inclinationPresent = 1 << 3;
-      const int expendedEnergyPresent = 1 << 7;
-      const int heartRatePresent = 1 << 8;
-      const int elapsedTimePresent = 1 << 10;
-
-      // Instantaneous Speed is always present
-      if (value.length >= offset + 2) {
-        int speed = byteData.getUint16(offset, Endian.little);
-        data.speed = speed * 0.01;
+      // Bit 0: More Data (0 = Instantaneous Speed present)
+      if ((flags & 0x0001) == 0) {
+        if (value.length >= offset + 2) {
+          data.speed = byteData.getUint16(offset, Endian.little) * 0.01;
+        }
         offset += 2;
       }
 
-      // Total Distance
-      if ((flags & totalDistancePresent) != 0) {
+      // Bit 1: Average Speed present
+      if ((flags & 0x0002) != 0) {
+        offset += 2;
+      }
+
+      // Bit 2: Total Distance present
+      if ((flags & 0x0004) != 0) {
         if (value.length >= offset + 3) {
-          int distance = byteData.getUint8(offset) |
+          int distance =
+              byteData.getUint8(offset) |
               (byteData.getUint8(offset + 1) << 8) |
               (byteData.getUint8(offset + 2) << 16);
           data.distance = distance.toDouble();
-          offset += 3;
         }
+        offset += 3;
       }
 
-      // Inclination and Ramp Angle
-      if ((flags & inclinationPresent) != 0) {
+      // Bit 3: Inclination and Ramp Angle present
+      if ((flags & 0x0008) != 0) {
         if (value.length >= offset + 4) {
-          int incline = byteData.getInt16(offset, Endian.little);
-          data.incline = incline * 0.1;
-          offset += 2; // Inclination
-          offset += 2; // Ramp Angle (skipped)
+          // A esteira reporta % via FTMS (0-100%), mas o painel mostra 0-15 níveis.
+          // Converte: percent = raw * 0.1, nível = percent * 15 / 100
+          double percentValue = byteData.getInt16(offset, Endian.little) * 0.1;
+          data.incline = percentValue * maxInclineLevels / maxInclinePercent;
         }
+        offset += 4;
       }
 
-      // Expended Energy
-      if ((flags & expendedEnergyPresent) != 0) {
-        if (value.length >= offset + 3) {
-          // Total Energy, Energy Per Hour, Energy Per Minute
-          int calories = byteData.getUint16(offset, Endian.little);
-          data.calories = calories;
-          offset += 2; // Total Energy
-          offset += 2; // Energy Per Hour (skipped)
-          offset += 1; // Energy Per Minute (skipped)
-        }
+      // Bit 4: Elevation Gain present
+      if ((flags & 0x0010) != 0) {
+        offset += 4;
       }
 
-      // Heart Rate
-      if ((flags & heartRatePresent) != 0) {
+      // Bit 5: Instantaneous Pace present
+      if ((flags & 0x0020) != 0) {
+        offset += 2;
+      }
+
+      // Bit 6: Average Pace present
+      if ((flags & 0x0040) != 0) {
+        offset += 2;
+      }
+
+      // Bit 7: Expended Energy present
+      if ((flags & 0x0080) != 0) {
+        if (value.length >= offset + 5) {
+          data.calories = byteData.getUint16(offset, Endian.little);
+        }
+        offset += 5;
+      }
+
+      // Bit 8: Heart Rate present
+      if ((flags & 0x0100) != 0) {
         if (value.length >= offset + 1) {
           data.heartRate = byteData.getUint8(offset);
-          offset += 1;
         }
+        offset += 1;
       }
 
-      // Elapsed Time
-      if ((flags & elapsedTimePresent) != 0) {
+      // Bit 9: Metabolic Equivalent present
+      if ((flags & 0x0200) != 0) {
+        offset += 1;
+      }
+
+      // Bit 10: Elapsed Time present
+      if ((flags & 0x0400) != 0) {
         if (value.length >= offset + 2) {
           data.time = byteData.getUint16(offset, Endian.little);
-          offset += 2;
         }
+        offset += 2;
       }
 
+      // Assume it's running if speed is greater than 0
+      data.isRunning = data.speed > 0;
+
+      // Assume control is done to avoid unused imports
       _treadmillDataController.add(data);
     } catch (e) {
       print('Erro ao processar dados da esteira: $e');
@@ -193,19 +237,23 @@ class BluetoothService {
 
   /// Solicita controle da esteira (necessário em alguns dispositivos antes de enviar comandos)
   Future<void> requestControl() async {
-    if (_controlPointCharacteristic == null) return;
+    if (_controlPointCharacteristic == null) {
+      print('⚠️ requestControl: Control Point não disponível');
+      return;
+    }
     try {
       // Opcode 0x00: Request Control
       await _controlPointCharacteristic!.write([0x00]);
+      print('✅ requestControl: Controle solicitado com sucesso');
     } catch (e) {
-      print('Erro ao solicitar controle: $e');
+      print('❌ requestControl: Erro ao solicitar controle: $e');
     }
   }
 
   /// Define a velocidade alvo (km/h)
   Future<void> setTargetSpeed(double speedKmh) async {
     if (_controlPointCharacteristic == null) {
-      print('Control Point não encontrado');
+      print('⚠️ setTargetSpeed: Control Point não encontrado');
       return;
     }
     try {
@@ -213,23 +261,33 @@ class BluetoothService {
       // Param: UINT16, 0.01 km/h
       int value = (speedKmh * 100).toInt();
       List<int> data = [0x02, value & 0xFF, (value >> 8) & 0xFF];
+      print('📤 setTargetSpeed: Enviando $speedKmh km/h (raw=$value, bytes=${data.map((b) => b.toRadixString(16).padLeft(2, "0")).join(" ")})');
       await _controlPointCharacteristic!.write(data);
+      print('✅ setTargetSpeed: Comando enviado com sucesso');
     } catch (e) {
-      print('Erro ao definir velocidade: $e');
+      print('❌ setTargetSpeed: Erro ao definir velocidade: $e');
     }
   }
 
-  /// Define a inclinação alvo (%)
-  Future<void> setTargetIncline(double inclinePercent) async {
-    if (_controlPointCharacteristic == null) return;
+  /// Define a inclinação alvo (nível 0-15 do painel da esteira)
+  /// Converte o nível do painel para percentual FTMS antes de enviar.
+  Future<void> setTargetIncline(double inclineLevel) async {
+    if (_controlPointCharacteristic == null) {
+      print('⚠️ setTargetIncline: Control Point não encontrado');
+      return;
+    }
     try {
+      // Converte nível do painel (0-15) para percentual FTMS (0-100%)
       // Opcode 0x03: Set Target Inclination
       // Param: SINT16, 0.1 %
-      int value = (inclinePercent * 10).toInt();
+      double percentValue = inclineLevel * maxInclinePercent / maxInclineLevels;
+      int value = (percentValue * 10).round();
       List<int> data = [0x03, value & 0xFF, (value >> 8) & 0xFF];
+      print('📤 setTargetIncline: Nível $inclineLevel → ${percentValue.toStringAsFixed(2)}% (raw=$value, bytes=${data.map((b) => b.toRadixString(16).padLeft(2, "0")).join(" ")})');
       await _controlPointCharacteristic!.write(data);
+      print('✅ setTargetIncline: Comando enviado com sucesso');
     } catch (e) {
-      print('Erro ao definir inclinação: $e');
+      print('❌ setTargetIncline: Erro ao definir inclinação: $e');
     }
   }
 
@@ -247,10 +305,23 @@ class BluetoothService {
     }
   }
 
-  /// Libera recursos
+  /// Cancela as assinaturas de dados sem destruir o singleton.
+  /// Use isto nas telas para limpar listeners sem matar os controllers.
+  void cancelSubscriptions() {
+    _ftmsSubscription?.cancel();
+    _ftmsSubscription = null;
+  }
+
+  /// Libera recursos completamente. Só chame isto se realmente quiser
+  /// encerrar toda a conexão Bluetooth permanentemente.
   void dispose() {
     _ftmsSubscription?.cancel();
-    _treadmillDataController.close();
-    _rawBytesController.close();
+    _ftmsSubscription = null;
+    if (!_treadmillDataController.isClosed) {
+      _treadmillDataController.close();
+    }
+    if (!_rawBytesController.isClosed) {
+      _rawBytesController.close();
+    }
   }
 }

@@ -42,3 +42,8 @@ android {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Para que o APK do Wear OS seja embutido no APK do celular
+    "wearApp"(project(":wear"))
+}
